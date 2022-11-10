@@ -263,8 +263,6 @@ public class ASP extends AbstractPlanner {
         // (best option to avoid dependencies on SAT4J IVecInt)
 
 
-
-
         return null;
     }
 
@@ -277,7 +275,7 @@ public class ASP extends AbstractPlanner {
         try {
             final ASP planner = new ASP(); //on instancie notre planner
             CommandLine cmd = new CommandLine(planner);
-            cmd.execute("npuzzle_domain.pddl","npuzzle.pddl");
+            cmd.execute("ressources_pddl/domain_blocks.pddl","ressources_pddl/blocks_p002.pddl");
         } catch (IllegalArgumentException e) {
             LOGGER.fatal(e.getMessage());
         }
