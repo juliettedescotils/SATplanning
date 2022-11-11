@@ -45,6 +45,6 @@ We generated two graphs, with two scripts:
 Since we did not manage to find any plans with our ASP planner, the curve of the number of steps needed with the ASP planner is at 0.
 
 
-Farid Belhiteche
-Juliette Descotils
+Juliette Descotils & Farid Belhiteche
+
 
