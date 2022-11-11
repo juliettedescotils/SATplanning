@@ -23,7 +23,7 @@ To this extent, we measured first the efficiency of  an HSP solver on 4 differen
 ## How to use the program : 
 
 - Open SATplanning project, open the ASP.java class (at src/main/java/fr.uga.pddl4j.examples.asp/ASP) and execute the file. <br>
-- To change the benchmark you want to use, uncomment the line corresponding to the wanted benchmark in the main of the program (line 269, 270, 271 or 272 ) and comment the three othe ones. <br>
+- To change the benchmark you want to use, uncomment the line corresponding to the wanted benchmark in the main of the program (line 269, 270, 271 or 272 ) and comment the three other ones. <br>
 - To change planner and use HSP, uncomment line 265 and comment the line 264. <br>
 - After the execution the number of steps needed to resolve the problem as well as the time needed are printed in the console of your IDE. <br>
 
