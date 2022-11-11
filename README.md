@@ -31,7 +31,7 @@ To this extent, we measured first the efficiency of  an HSP solver on 4 differen
     
 ### PDDL Decoding :
     
-- First, we succeded to fetch the goal and initial state fluents and encode them into a SAT sate.
+- First, we succeded to fetch the goal and initial state fluents and encode them into a SAT state.
 - We did the decoding of every of our possible actions in a suitable way for SAT modeling (preconditions, positive and negative effects), in the shape of a three-dimensionnal array.
 - Finally,  we generated a SAT problem, and added our clauses.
 - As we didn't succeed to generate the desired plan, we could not get the propper statistics our ASP planner.
