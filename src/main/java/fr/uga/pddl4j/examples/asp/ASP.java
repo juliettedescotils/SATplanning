@@ -1,8 +1,11 @@
 package fr.uga.pddl4j.examples.asp;
 
+import com.sun.tools.jconsole.JConsoleContext;
 import fr.uga.pddl4j.parser.DefaultParsedProblem;
 import fr.uga.pddl4j.plan.Plan;
+import fr.uga.pddl4j.plan.SequentialPlan;
 import fr.uga.pddl4j.planners.AbstractPlanner;
+import fr.uga.pddl4j.planners.statespace.HSP;
 import fr.uga.pddl4j.problem.*;
 import fr.uga.pddl4j.problem.operator.Action;
 import fr.uga.pddl4j.util.BitVector;
@@ -15,9 +18,15 @@ import org.sat4j.reader.Reader;
 import org.sat4j.specs.*;
 import picocli.CommandLine;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import static java.lang.System.out;
+import static java.lang.System.setOut;
 
 
 /**
@@ -67,57 +76,47 @@ public class ASP extends AbstractPlanner {
     @Override
 
     public Plan solve(final Problem problem) {
-        //on peut récupérer les actions du problème avec pb.getActions()
+
+        Plan plan = new SequentialPlan();
+        //Soit problem notre problème pddl.
 
 
         //Ici, on travaille sur les fluents du problème.
-        List<Fluent> problemFluents = problem.getFluents();
-        //System.out.println("Voici les fluents du problème");
-        //System.out.println(problemFluents);
-        //System.out.println("Voici les symboles des fluents du problème");
+        List<Fluent> problemFluents = problem.getFluents(); //On récupère tous les fluents
+        int numberOfFluents = problemFluents.size(); //On récupère leur nombre
 
-        int numberOfFluents = problemFluents.size();
+
 
         //Ici, on travaille sur l'état initial du problème
+        InitialState initialState = problem.getInitialState(); //On récupère l'état initial du problème pddl
+        BitVector initialStatePositiveFluents = initialState.getPositiveFluents(); //On récupère les fluents positifs
 
-        InitialState initialState = problem.getInitialState();
-        BitVector initialStatePositiveFluents = initialState.getPositiveFluents();
-        //BitVector initialStateNegativeFluents = initialState.getNegativeFluents();
-        //System.out.println("Voici les fluents POSITIFS de l'état initial");
-        //System.out.println(initialStatePositiveFluents);
-        //System.out.println("Voici les fluents NEGATIFS de l'état initial");
-        //System.out.println(initialStateNegativeFluents);
-        //System.out.println(initialState.toString());
-
-
-        int[] initialStateFluentsSign = new int[numberOfFluents];
-
-        for(int i=0; i<initialStateFluentsSign.length; i++){
-            initialStateFluentsSign[i] = -(i+1);
+        int[] initialStateFluentsSign = new int[numberOfFluents]; //On initialise le vecteur des fluents, sous forme de tableau d'entiers
+        for(int i=0; i<initialStateFluentsSign.length; i++){ //On les initialise tous à false (sous forme d'entiers négatifs)
+            initialStateFluentsSign[i] = -(i+1); //on incrémente tous les entiers de 1 pour ne pas avoir de fluent de symbole 0.
         }
 
 
-        int[] initialPosFluents = initialStatePositiveFluents.stream().toArray();
+        int[] initialPosFluents = initialStatePositiveFluents.stream().toArray(); //On récupère les fluents positifs sous la forma d'array depuis le bitvector
         for(int i=0; i<initialPosFluents.length ;i++){
-            initialStateFluentsSign[initialPosFluents[i]] = - initialStateFluentsSign[initialPosFluents[i]];
+            initialStateFluentsSign[initialPosFluents[i]] = - initialStateFluentsSign[initialPosFluents[i]]; //on prend l'opposé des fluents positifs (ie on les met à true)
         }
 
 
+        //Ici, on travaille sur le but du problème
+        Goal goalState = (Goal) problem.getGoal(); //on récupère le but
 
-        //Ici, on travaille sur le goal
-        Goal goalState = (Goal) problem.getGoal();
-
-        BitVector goalStatePositiveFluents = goalState.getPositiveFluents();
+        BitVector goalStatePositiveFluents = goalState.getPositiveFluents(); //on récupère de manière analogue les fluents positifs du but
 
         int[] goalStateFluentsSign = new int[numberOfFluents];
 
-        for(int i=0; i<goalStateFluentsSign.length ;i++){
+        for(int i=0; i<goalStateFluentsSign.length ;i++){ //on initialise tous les fluents à false
             goalStateFluentsSign[i] = -(i+1);
         }
 
         int[] goalPosFluents = goalStatePositiveFluents.stream().toArray();
         for(int i=0; i<goalPosFluents.length; i++){
-            goalStateFluentsSign[goalPosFluents[i]] = -goalStateFluentsSign[goalPosFluents[i]];
+            goalStateFluentsSign[goalPosFluents[i]] = -goalStateFluentsSign[goalPosFluents[i]]; //on initialise les bons à true
         }
 
 
@@ -125,36 +124,39 @@ public class ASP extends AbstractPlanner {
         List<Action> problemActions = problem.getActions();
 
         //on crée un vecteur contenant pour chaque action ses préconditions, ses effets positifs et négatifs
-        int[][][] vectorActions = new int[problemActions.size()][3][];
-        int[][] pivot = new int[3][];
+        int[][][] vectorActions = new int[problemActions.size()][3][]; // pour avoir un tableau de la forme [[[preconditions],[effets+],[effets-]],[[preconditions],[effets+],[effets-]],...]
+        int[][] pivot = new int[3][]; //cela correspond à [[preconditions],[effets+],[effets-]]
 
-        int numberOfAction = 0;
+        int numberOfAction = 0; //on initialise un compteur
+
         for(Action problemAction: problemActions){
-            //System.out.println("Voici le nom de l'action n° "+numberOfAction+ " : "+problemAction.getName());
-
-            //System.out.println("Voici les préconditions de cette action :");
+            //on récupère les préconditions
             pivot[0] = problemAction.getPrecondition().getPositiveFluents().stream().toArray();
-            //System.out.println("Voici les effets positifs");
+            //on récupère les effets positifs
             pivot[1] = problemAction.getConditionalEffects().get(0).getEffect().getPositiveFluents().stream().toArray();
-            //System.out.println("Voici les effets négatifs");
+            //on récupère les effets négatifs
             pivot[2] = problemAction.getConditionalEffects().get(0).getEffect().getNegativeFluents().stream().toArray();
 
-            vectorActions[numberOfAction][0] = pivot[0];
-            vectorActions[numberOfAction][1] = pivot[1];
 
-            //on rajoute un signe - devant les effets négatifs
+
             for(int j =0; j<pivot[0].length;j++){
-                pivot[0][j] = pivot[0][j]+1;
+                pivot[0][j] = pivot[0][j]+1; //on incrémente tous les symboles 1 pour ne pas se retrouver avec un fluent de symbole 0
             }
             for(int j =0; j<pivot[1].length;j++){
-                pivot[1][j] = pivot[1][j]+1;
+                pivot[1][j] = pivot[1][j]+1; //idem
             }
+            //on rajoute un signe - devant les effets négatifs
             for(int j =0; j<pivot[2].length;j++){
-                pivot[2][j] = -(pivot[2][j]+1);
+                pivot[2][j] = -(pivot[2][j]+1); //on incrémente également de 1 avant de réaliser le changement de signe
             }
-            vectorActions[numberOfAction][2] = pivot[2];
-            numberOfAction++;
+
+            vectorActions[numberOfAction][0] = pivot[0]; //on les insère tels quels dans notre tableau d'actions (préconditions)
+            vectorActions[numberOfAction][1] = pivot[1]; //de même (effets positifs)
+            vectorActions[numberOfAction][2] = pivot[2]; //de même (effets négatifs)
+
+            numberOfAction++; //on incrémente notre compteur
         }
+
 
 
         //on calcule n, ie le nombre maximum d'étapes du plan
@@ -169,7 +171,6 @@ public class ASP extends AbstractPlanner {
         }
 
         //n = Math.pow(2,Math.pow(D,Ap));
-        //finalement, c'est infini pour notre exemple (sokoban). On fixe sa valeur à 500000
 
 
 
@@ -177,8 +178,6 @@ public class ASP extends AbstractPlanner {
         final int nbClauses = numberOfAction;
 
         ISolver solver = SolverFactory.newDefault();
-
-        solver.setTimeout(3600); // 1 hour timeout
 
         //on ajoute la clause associée à l'état initial et à l'état but
         try {
@@ -188,79 +187,68 @@ public class ASP extends AbstractPlanner {
             throw new RuntimeException(e);
         }
 
-        List<Integer> megaPivot = new ArrayList<>();
-        List<Integer> megaPivot2 = new ArrayList<>();
+        List<Integer> clausePivot = new ArrayList<>(); //nous allons désormais créer nos clauses, à partir de notre vecteur d'actions
+
         for (int i=0;i<nbClauses;i++) {
             //ici, on crée la clause qui va bien
             //pour modéliser une possibilité d'action (ie une transition possible), on va créer les clauses
-            //on concatène les (préconditions)+, les (effets négatifs)+, les (effets positifs)-
-            //explication 1: les préconditions sont nécéssaires aux actions -> les entiers associés aux fluents sont positifs
+
+            //Pour une transition d'une Étape i-1 à une étape i :
+
+            //on encode l'étape i-1 :
+
+            //on concatène les (préconditions)+ à true , les (effets négatifs)+ à true, les (effets positifs)- à false
+            //explication 1: les préconditions sont nécessaires aux actions -> les entiers associés aux fluents sont positifs
             //explication 2: les effets qui sont négatifs à l'étape i sont  à l'étape i-1 en positif -> on ne pourrait pas les passer en négatif sinon
             //explication 3: vice versa pour les effets positifs à l'étape i -> on ne saurait ajouter ce qui est déjà présent
-            int[][] siuu = vectorActions[i];
+
 
             //Rappel : vectorActions est à 3 dimensions
             //Pour chaque élément : il y a 3 vecteurs d'entiers : [[[preconditions],[effets+],[effets-]]]
 
             //on parcourt le premier vecteur de préconditions :
             for(int prec : vectorActions[i][0]){
-                megaPivot.add(prec);
+                clausePivot.add(prec);
             }
 
             //on parcourt de même le vecteur des effets positifs
             for(int pos : vectorActions[i][1]){
-                megaPivot.add(-pos);
-                megaPivot2.add(pos);
+                clausePivot.add(-pos); //les effets positifs à l'étape i sont négatifs à l'étape i-1
             }
 
             //puis le vecteur des effets négatifs
             for(int neg : vectorActions[i][2]){
-                megaPivot.add(-neg);
-                megaPivot2.add(neg);
+                clausePivot.add(-neg); //les effets négatifs à l'étape i sont positifs à l'étape i-1
             }
 
-            int[] deuxiemePivot = new int[megaPivot.size()];
-            for(int j=0;j<megaPivot.size();j++){
-                deuxiemePivot[j] = megaPivot.get(j);
-            }
 
-            int[] deuxiemePivot2 = new int[megaPivot2.size()];
-            for(int j=0;j<megaPivot2.size();j++){
-                deuxiemePivot2[j] = megaPivot2.get(j);
+            int[] deuxiemePivot = new int[clausePivot.size()]; //Ce second pivot nous permet de placer notre clause dans un tableau à une dimension
+            for(int j=0;j<clausePivot.size();j++){
+                deuxiemePivot[j] = clausePivot.get(j);
             }
 
             try {
                 solver.addClause(new VecInt(deuxiemePivot)); // adapt Array to IVecInt
-                solver.addClause(new VecInt(deuxiemePivot2)); // adapt Array to IVecInt
             } catch (ContradictionException e) {
                 throw new RuntimeException(e);
             }
+
+            clausePivot.clear(); //on réinitialise notre liste pour l'étape suivante
         }
 
-        Reader reader = new DimacsReader(solver);
-        PrintWriter out = new PrintWriter(System.out,true);
-        // CNF filename is given on the command line
         try {
-            IProblem problemziu = solver;
-            if (problemziu.isSatisfiable()) {
+            if (solver.isSatisfiable()) {
                 System.out.println("Satisfiable !");
-                reader.decode(problemziu.model(), out);
-                int i =0;
+                for(int num : solver.findModel()){
+                    System.out.println(num);
+                }
+
             } else {
                 System.out.println("Unsatisfiable !");
             }
         } catch (TimeoutException e) {
             System.out.println("Timeout, sorry!");
         }
-
-
-
-
-        // prepare the solver to accept MAXVAR variables. MANDATORY for MAXSAT solving
-        solver.newVar(maxVar);
-        solver.setExpectedNumberOfClauses(nbClauses);
-        // Feed the solver using Dimacs format, using arrays of int
-        // (best option to avoid dependencies on SAT4J IVecInt)
 
 
         return null;
@@ -274,8 +262,14 @@ public class ASP extends AbstractPlanner {
     public static void main(String[] args) {
         try {
             final ASP planner = new ASP(); //on instancie notre planner
+            //final HSP planner = new HSP(); // -> on instancie le planner HSP (utilisé plus tard pour nos graphiques de statistiques sur 4 différents types de problèmes)
+
             CommandLine cmd = new CommandLine(planner);
-            cmd.execute("ressources_pddl/domain_blocks.pddl","ressources_pddl/blocks_p002.pddl");
+
+            cmd.execute("ressources_pddl/domain_blocks.pddl","ressources_pddl/blocks_p001.pddl");
+            //cmd.execute("ressources_pddl/domain_logistics.pddl","ressources_pddl/logistics_p01.pddl");
+            //cmd.execute("ressources_pddl/domain_depots.pddl","ressources_pddl/depots_p01.pddl");
+            //cmd.execute("ressources_pddl/domain_gripper.pddl","ressources_pddl/gripper_p01.pddl");
         } catch (IllegalArgumentException e) {
             LOGGER.fatal(e.getMessage());
         }
